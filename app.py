@@ -6,8 +6,8 @@ import io
 
 def generate_thermal_label(text_lines):
     # Define exact dimensions in millimeters
-    width = 60 * mm
-    height = 30 * mm
+    width = 55 * mm
+    height = 25 * mm
     
     # Create a bytes buffer for the PDF
     buffer = io.BytesIO()
