@@ -1,69 +1,119 @@
 import streamlit as st
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import io
 
-def generate_thermal_label(text_lines):
-    # Define exact dimensions in millimeters
-    width = 55 * mm
-    height = 25 * mm
+def generate_thermal_label(text, alignment, is_bold, is_underline, font_size):
+    # 60mm x 30mm dimensions
+    width = 60 * mm
+    height = 30 * mm
     
-    # Create a bytes buffer for the PDF
     buffer = io.BytesIO()
     
-    # Create the canvas with our custom size
-    c = canvas.Canvas(buffer, pagesize=(width, height))
+    # SimpleDocTemplate manages formatting, margins, and wrapping automatically
+    # Set small 3mm margins to maximize the print area
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=(width, height),
+        leftMargin=3*mm, 
+        rightMargin=3*mm, 
+        topMargin=3*mm, 
+        bottomMargin=3*mm
+    )
     
-    # Set up fonts and text object
-    c.setFont("Helvetica-Bold", 10)
+    # Map alignment selection
+    align_map = {
+        "Left": TA_LEFT,
+        "Center": TA_CENTER,
+        "Right": TA_RIGHT
+    }
     
-    # Start drawing text from the top-left, accounting for margins
-    text_object = c.beginText(4 * mm, height - 6 * mm)
-    text_object.setLeading(14) # Line spacing
+    # Build custom paragraph style based on UI selections
+    styles = getSampleStyleSheet()
+    custom_style = ParagraphStyle(
+        'LabelStyle',
+        parent=styles['Normal'],
+        fontName="Helvetica",
+        fontSize=font_size,
+        leading=font_size + 4, # Automatic line spacing adjustment
+        alignment=align_map[alignment]
+    )
     
-    for line in text_lines:
-        if line.strip():
-            text_object.textLine(line)
+    story = []
+    
+    # Process text lines and apply bold/underline HTML-like tags
+    lines = text.split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        if line.strip() == "":
+            formatted_lines.append("")
+            continue
             
-    c.drawText(text_object)
+        processed_line = line
+        if is_bold:
+            processed_line = f"<b>{processed_line}</b>"
+        if is_underline:
+            processed_line = f"<u>{processed_line}</u>"
+            
+        formatted_lines.append(processed_line)
     
-    # Finish the page and save
-    c.showPage()
-    c.save()
+    # Join back with HTML breaks for multi-line support inside the Paragraph flowable
+    full_html_text = "<br/>".join(formatted_lines)
+    story.append(Paragraph(full_html_text, custom_style))
     
+    # Build PDF
+    doc.build(story)
     buffer.seek(0)
     return buffer
 
-# Streamlit UI
-st.set_page_config(page_title="60x30mm Thermal Label Generator", page_icon="🏷️")
+# --- Streamlit UI Setup ---
+st.set_page_config(page_title="Custom Thermal Label Gen", page_icon="🏷️")
+st.title("🏷️ Advanced 60x30mm Label Gen")
 
-st.title("🏷️ Thermal Label Generator")
-st.write("Create perfectly sized **60mm x 30mm** labels for your thermal printer.")
+# Formatting options sidebar
+st.sidebar.header("🎨 Text Styling")
 
-# Input area
+text_alignment = st.sidebar.radio(
+    "Text Alignment",
+    options=["Left", "Center", "Right"],
+    index=1 # Default to center
+)
+
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    make_bold = st.checkbox("Bold (B)", value=True)
+with col2:
+    make_underline = st.checkbox("Underline (U)", value=False)
+
+font_size = st.sidebar.slider("Font Size (pt)", min_value=6, max_value=24, value=11)
+
+# Main input text area
 st.subheader("Label Content")
 label_input = st.text_area(
-    "Enter text for your label (one per line):", 
-    value="PRODUCT NAME\nSKU: 12345678\nPRICE: $19.99",
+    "Enter label text (Supports multiple lines):", 
+    value="BARGAIN BOUTIQUE\nSKU: 987654321\n$14.99",
     height=120
 )
 
-# Process text
-lines = label_input.split('\n')
-
-if st.button("Generate Preview & Download"):
-    with st.spinner("Generating your label..."):
-        pdf_data = generate_thermal_label(lines)
+if st.button("✨ Generate & Preview"):
+    with st.spinner("Formatting layout..."):
+        pdf_data = generate_thermal_label(
+            label_input, 
+            text_alignment, 
+            make_bold, 
+            make_underline, 
+            font_size
+        )
         
-        st.success("Label generated successfully!")
+        st.success("Label created flawlessly!")
         
-        # Download button
         st.download_button(
-            label="📥 Download Label PDF",
+            label="📥 Download Ready-to-Print PDF",
             data=pdf_data,
-            file_name="thermal_label_60x30.pdf",
+            file_name="styled_label_60x30.pdf",
             mime="application/pdf"
         )
-
-st.info("💡 **Printer Tip:** When printing this PDF, make sure your printer settings are set to **100% Scale / Actual Size** and the paper size is configured to 60mm x 30mm to prevent stretching.")
