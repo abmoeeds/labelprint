@@ -1,10 +1,11 @@
 import streamlit as st
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import io
+from datetime import datetime  # Added for generating dynamic names
 
 def generate_thermal_label(text, alignment, is_bold, is_underline, font_size):
     # 60mm x 30mm dimensions
@@ -71,8 +72,12 @@ def generate_thermal_label(text, alignment, is_bold, is_underline, font_size):
     return buffer
 
 # --- Streamlit UI Setup ---
-st.set_page_config(page_title="Custom Thermal Label Gen", page_icon="🏷️")
-st.title("🏷️ Advanced 60x30mm Label Gen")
+st.set_page_config(page_title="Unique Thermal Label Gen", page_icon="🏷️")
+st.title("🏷️ Dynamic 60x30mm Label Gen")
+
+# File naming options sidebar
+st.sidebar.header("📁 File Saving Options")
+file_prefix = st.sidebar.text_input("File Name Prefix", value="label")
 
 # Formatting options sidebar
 st.sidebar.header("🎨 Text Styling")
@@ -109,11 +114,19 @@ if st.button("✨ Generate & Preview"):
             font_size
         )
         
-        st.success("Label created flawlessly!")
+        # Generate a new unique filename using the current timestamp
+        # Format: prefix_YYYYMMDD_HHMMSS.pdf (e.g., label_20260607_230145.pdf)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        clean_prefix = "".join(c for c in file_prefix if c.isalnum() or c in ('_', '-')).strip()
+        if not clean_prefix:
+            clean_prefix = "label"
+        unique_filename = f"{clean_prefix}_{timestamp}.pdf"
+        
+        st.success(f"Label created flawlessly! Generated filename: `{unique_filename}`")
         
         st.download_button(
             label="📥 Download Ready-to-Print PDF",
             data=pdf_data,
-            file_name="styled_label_60x30.pdf",
+            file_name=unique_filename,  # Pass the unique dynamic filename here
             mime="application/pdf"
         )
