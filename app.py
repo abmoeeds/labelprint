@@ -1,51 +1,47 @@
 import streamlit as st
-from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import io
-from datetime import datetime  # Added for generating dynamic names
+from datetime import datetime
 
-def generate_thermal_label(text, alignment, is_bold, is_underline, font_size):
-    # 60mm x 30mm dimensions
-    width = 60 * mm
-    height = 30 * mm
+def generate_thermal_label(text, alignment, is_bold, is_underline, font_size, width_mm, height_mm):
+    # Dynamic dimensions based on user inputs
+    width = width_mm * mm
+    height = height_mm * mm
     
     buffer = io.BytesIO()
     
-    # SimpleDocTemplate manages formatting, margins, and wrapping automatically
-    # Set small 3mm margins to maximize the print area
+    # Calculate margins dynamically: use 3mm or smaller if the label is tiny
+    margin_size = min(3, width_mm * 0.05, height_mm * 0.05) * mm
+    
     doc = SimpleDocTemplate(
         buffer, 
         pagesize=(width, height),
-        leftMargin=3*mm, 
-        rightMargin=3*mm, 
-        topMargin=3*mm, 
-        bottomMargin=3*mm
+        leftMargin=margin_size, 
+        rightMargin=margin_size, 
+        topMargin=margin_size, 
+        bottomMargin=margin_size
     )
     
-    # Map alignment selection
     align_map = {
         "Left": TA_LEFT,
         "Center": TA_CENTER,
         "Right": TA_RIGHT
     }
     
-    # Build custom paragraph style based on UI selections
     styles = getSampleStyleSheet()
     custom_style = ParagraphStyle(
         'LabelStyle',
         parent=styles['Normal'],
         fontName="Helvetica",
         fontSize=font_size,
-        leading=font_size + 4, # Automatic line spacing adjustment
+        leading=font_size + 4, 
         alignment=align_map[alignment]
     )
     
     story = []
-    
-    # Process text lines and apply bold/underline HTML-like tags
     lines = text.split('\n')
     formatted_lines = []
     
@@ -62,30 +58,39 @@ def generate_thermal_label(text, alignment, is_bold, is_underline, font_size):
             
         formatted_lines.append(processed_line)
     
-    # Join back with HTML breaks for multi-line support inside the Paragraph flowable
     full_html_text = "<br/>".join(formatted_lines)
     story.append(Paragraph(full_html_text, custom_style))
     
-    # Build PDF
-    doc.build(story)
+    try:
+        doc.build(story)
+    except Exception as e:
+        # Graceful handling if text overflows the custom dimensions
+        st.error("⚠️ The text size or length is too large for these label dimensions. Try reducing the font size.")
+        return None
+        
     buffer.seek(0)
     return buffer
 
 # --- Streamlit UI Setup ---
-st.set_page_config(page_title="Unique Thermal Label Gen", page_icon="🏷️")
-st.title("🏷️ Dynamic 60x30mm Label Gen")
+st.set_page_config(page_title="Custom Size Thermal Label Gen", page_icon="🏷️")
+st.title("🏷️ Dynamic Thermal Label Gen")
 
-# File naming options sidebar
+# --- Sidebar Configuration ---
+st.sidebar.header("📏 Label Dimensions")
+col_w, col_h = st.sidebar.columns(2)
+with col_w:
+    label_width = st.number_input("Width (mm)", min_value=10, max_value=200, value=60, step=1)
+with col_h:
+    label_height = st.number_input("Height (mm)", min_value=10, max_value=200, value=30, step=1)
+
 st.sidebar.header("📁 File Saving Options")
 file_prefix = st.sidebar.text_input("File Name Prefix", value="label")
 
-# Formatting options sidebar
 st.sidebar.header("🎨 Text Styling")
-
 text_alignment = st.sidebar.radio(
     "Text Alignment",
     options=["Left", "Center", "Right"],
-    index=1 # Default to center
+    index=1
 )
 
 col1, col2 = st.sidebar.columns(2)
@@ -94,39 +99,42 @@ with col1:
 with col2:
     make_underline = st.checkbox("Underline (U)", value=False)
 
-font_size = st.sidebar.slider("Font Size (pt)", min_value=6, max_value=24, value=11)
+font_size = st.sidebar.slider("Font Size (pt)", min_value=6, max_value=36, value=11)
 
-# Main input text area
+# --- Main UI Area ---
 st.subheader("Label Content")
 label_input = st.text_area(
-    "Enter label text (Supports multiple lines):", 
+    "Enter label text:", 
     value="BARGAIN BOUTIQUE\nSKU: 987654321\n$14.99",
     height=120
 )
 
 if st.button("✨ Generate & Preview"):
-    with st.spinner("Formatting layout..."):
+    with st.spinner("Calculating canvas layout..."):
         pdf_data = generate_thermal_label(
             label_input, 
             text_alignment, 
             make_bold, 
             make_underline, 
-            font_size
+            font_size,
+            label_width,
+            label_height
         )
         
-        # Generate a new unique filename using the current timestamp
-        # Format: prefix_YYYYMMDD_HHMMSS.pdf (e.g., label_20260607_230145.pdf)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        clean_prefix = "".join(c for c in file_prefix if c.isalnum() or c in ('_', '-')).strip()
-        if not clean_prefix:
-            clean_prefix = "label"
-        unique_filename = f"{clean_prefix}_{timestamp}.pdf"
-        
-        st.success(f"Label created flawlessly! Generated filename: `{unique_filename}`")
-        
-        st.download_button(
-            label="📥 Download Ready-to-Print PDF",
-            data=pdf_data,
-            file_name=unique_filename,  # Pass the unique dynamic filename here
-            mime="application/pdf"
-        )
+        if pdf_data is not None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            clean_prefix = "".join(c for c in file_prefix if c.isalnum() or c in ('_', '-')).strip()
+            if not clean_prefix:
+                clean_prefix = "label"
+                
+            # Embed the dimensions directly into the filename to keep things organized
+            unique_filename = f"{clean_prefix}_{label_width}x{label_height}_{timestamp}.pdf"
+            
+            st.success(f"Label created for dimensions **{label_width}mm × {label_height}mm**!")
+            
+            st.download_button(
+                label="📥 Download Custom PDF",
+                data=pdf_data,
+                file_name=unique_filename,
+                mime="application/pdf"
+            )
